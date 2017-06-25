@@ -87,8 +87,6 @@ parseEval = do
     void $ string "```hs\n"
     manyTill anyChar (try (string "```"))
 
--- expr := "```" lang \n content "```" | content
-
 imports :: [([Char], Maybe [Char])]
 imports =
     [ ("Prelude", Nothing)
@@ -114,11 +112,14 @@ showErr (UnknownError e) = show e
 showErr (NotAllowed e) = show e
 showErr (GhcException e) = show e
 
+-- | Magic numbers because discord messages are limited to a length of 2000
+-- characters.
 format :: Text -> Text
 format output
-    | T.length output < 2000 - 7 = "```\n" <> output <> "```"
+    | T.length output < 1993 = "```\n" <> output <> "```"
     | otherwise = "```\n" <> T.take 1990 output <> "..." <> "```"
 
+-- | Epic meme
 regionalIndicator :: Text -> Text
 regionalIndicator = T.concatMap regionize . T.filter isAlpha
     where regionize ch =
@@ -129,9 +130,8 @@ mention u = "<@" <> show (userId u) <> ">"
 
 command :: Message -> Text -> (Text -> Effect DiscordM ()) -> Effect DiscordM ()
 command Message{..} cmd action =
-    case parse (parseCommand $ toS cmd) "" messageContent of
-        Left  _    -> return ()
-        Right body -> action body
+    let res = parse (parseCommand $ toS cmd) "" messageContent
+    in  either (void . return) action res
 
 parseCommand :: [Char] -> Parser Text
 parseCommand cmd = do
