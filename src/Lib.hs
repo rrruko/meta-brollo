@@ -154,7 +154,7 @@ prettyList ns mod' = T.concat ["ROLLED ", show $ sum ns + mod',
 parseDice :: Parser (Int, Int, Int)
 parseDice = do
     diceCount <- optionMaybe (digitToInt <$> digit)
-    optional $ char 'd'
+    void $ char 'd'
     size <- read <$> many1 digit
     spaces
     modifier' <- optionMaybe modifier
