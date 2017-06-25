@@ -10,7 +10,7 @@ module Lib
     ( startBot
     ) where
 
-import Lib.Prelude hiding (many, try)
+import Lib.Prelude hiding (many, optional, try)
 import Language.Haskell.Interpreter
 import Data.Char
 import Data.List (unlines)
@@ -41,8 +41,8 @@ handleMessage msg@Message{..} = do
         gen <- liftIO newStdGen
         case parse parseDice "" body of
             Left err -> print err
-            Right (diceCount, size) ->
-                let res = prettyList (rolls gen diceCount size)
+            Right roll@(_, _, mod') ->
+                let res = prettyList (rolls gen roll) mod'
                 in  reply msg $ mention messageAuthor <> " " <> res
     command msg "!b" $ \body -> reply msg $ regionalIndicator body
     when (validate messageAuthor) $ do
@@ -140,24 +140,37 @@ parseCommand cmd = do
     body <- many (satisfy (const True))
     return (toS body)
 
-rolls :: StdGen -> Int -> Int -> [Int]
-rolls gen n size = take n $ randomRs (1, size) gen
+rolls :: StdGen -> (Int, Int, Int) -> [Int]
+rolls gen (n, size, _) = take n $ randomRs (1, size) gen
 
-prettyList :: [Int] -> Text
-prettyList [] = "ROLLED NO DICE"
-prettyList [n] = "ROLLED " <> show n
-prettyList ns =
-    "ROLLED " <> show (sum ns) <> " = " <> (T.intercalate " + " $ fmap show ns)
+prettyList :: [Int] -> Int -> Text
+prettyList [] _ = "ROLLED NO DICE"
+prettyList [n] mod' = T.concat
+    ["ROLLED ", show $ n + mod', " (", show n, " + ", show mod', ")"]
+prettyList ns mod' = T.concat ["ROLLED ", show $ sum ns + mod',
+    " (", T.intercalate " + " $ fmap show ns, ")"]
 
 -- | Dice count is limited to one digit, but size can be arbitrary.
-parseDice :: Parser (Int, Int)
+parseDice :: Parser (Int, Int, Int)
 parseDice = do
-    diceCount <- digitToInt <$> digit
-    void $ char 'd'
+    diceCount <- optionMaybe (digitToInt <$> digit)
+    optional $ char 'd'
     size <- read <$> many1 digit
     spaces
-    return (diceCount, size)
-        where read = maybe 0 fst . head . reads
+    modifier' <- optionMaybe modifier
+    return (fromMaybe 1 diceCount, size, fromMaybe 0 modifier')
+
+read = maybe 0 fst . head . reads
+
+modifier :: Parser Int
+modifier = do
+    op <- oneOf "+-"
+    spaces
+    n <- read <$> many1 digit
+    if op == '+' then
+        return n
+    else
+        return (-n)
 
 -- | Convert printable ascii characters (except space) into corresponding
 -- fullwidth characters, by adding an offset of 65248 to their unicode
