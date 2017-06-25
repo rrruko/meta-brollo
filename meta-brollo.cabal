@@ -25,6 +25,9 @@ library
                      , pipes
                      , random
                      , parsec
+                     , process
+                     , hint
+                     , comonad
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings, NoImplicitPrelude
 
