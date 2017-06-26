@@ -91,7 +91,7 @@ imports :: [([Char], Maybe [Char])]
 imports =
     [ ("Prelude", Nothing)
     , ("Control.Arrow", Nothing)
-    , ("Control.Category", Nothing)
+    , ("Control.Applicative", Nothing)
     , ("Control.Monad", Nothing)
     , ("Data.Bifunctor", Nothing)
     , ("Data.Char", Nothing)
@@ -145,10 +145,21 @@ rolls gen (n, size, _) = take n $ randomRs (1, size) gen
 
 prettyList :: [Int] -> Int -> Text
 prettyList [] _ = "ROLLED NO DICE"
-prettyList [n] mod' = T.concat
-    ["ROLLED ", show $ n + mod', " (", show n, " + ", show mod', ")"]
-prettyList ns mod' = T.concat ["ROLLED ", show $ sum ns + mod',
+prettyList [n] 0 = "ROLLED " <> show n
+prettyList ns  0 = T.concat ["ROLLED ", show $ sum ns,
     " (", T.intercalate " + " $ fmap show ns, ")"]
+prettyList [n] mod' = T.concat ["ROLLED ", show $ n + mod',
+    " (", show n, " + ", show mod', ")"]
+prettyList ns  mod' = prettyList (mod':ns) 0
+
+{-
+!roll 0dn = ROLLED NO DICE
+!roll 1dn = ROLLED N
+!roll ndm = ROLLED N (A + ... + Z)
+!roll 0dn + c = ROLLED NO DICE
+!roll 1dn + c = ROLLED N (A + B)
+!roll ndm + c = ROLLED N (A + ... + Z + C)
+-}
 
 -- | Dice count is limited to one digit, but size can be arbitrary.
 parseDice :: Parser (Int, Int, Int)
