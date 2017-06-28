@@ -20,6 +20,8 @@ import Text.Parsec
 import Text.Parsec.Text (Parser)
 import Network.Discord
 import System.Random
+import Data.Time.Clock
+import Data.Time.Format
 
 startBot :: IO ()
 startBot = do
@@ -28,6 +30,9 @@ startBot = do
     runBot (Bot $ toS tok) $ do
         with ReadyEvent $ handleReady
         with MessageCreateEvent $ handleMessage
+    time <- getCurrentTime
+    print $ "Restarting at " <> formatTime defaultTimeLocale "%T%P UTC" time
+    startBot
 
 handleReady :: Init -> Effect DiscordM ()
 handleReady (Init v u _ _ _) = liftIO . putText $
@@ -44,6 +49,11 @@ handleMessage msg@Message{..} = do
             Right roll@(_, _, mod') ->
                 let res = prettyList (rolls gen roll) mod'
                 in  reply msg $ mention messageAuthor <> " " <> res
+    command msg "!coin" $ \_ -> do
+        coin <- liftIO randomIO
+        case coin of
+            True  -> reply msg $ mention messageAuthor <> " HEADS"
+            False -> reply msg $ mention messageAuthor <> " TAILS"
     command msg "!b" $ \body -> reply msg $ regionalIndicator body
     when (validate messageAuthor) $ do
         command msg "!eval" $ interpret' eval' msg
@@ -59,9 +69,9 @@ interpret' action msg body = do
                 Left err -> showErr err
                 Right r -> r
         Left _ -> do
-            reply msg $ "Please format your message like this:\n" <>
+            reply msg $ "PLEASE FORMAT YOUR MESSAGE LIKE THIS:\n" <>
                         "\\`\\`\\`hs\n" <>
-                        "[code]\n" <>
+                        "[CODE]\n" <>
                         "\\`\\`\\`"
 
 eval' :: Text -> Interpreter [Char]
