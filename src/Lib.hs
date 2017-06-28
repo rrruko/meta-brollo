@@ -16,12 +16,23 @@ import Data.Char
 import Data.List (unlines)
 import qualified Data.Text as T
 import Pipes
-import Text.Parsec
+import Text.Parsec hiding ((<|>))
+import Text.Parsec.Prim (unexpected)
 import Text.Parsec.Text (Parser)
 import Network.Discord
 import System.Random
 import Data.Time.Clock
 import Data.Time.Format
+
+data ModType = Total | Each
+data Mod = Mod Int ModType
+
+-- Describe what dice will be rolled
+data Rolls = Rolls {
+    count :: Int,
+    size :: Int,
+    modifier :: Maybe Mod
+}
 
 startBot :: IO ()
 startBot = do
@@ -34,30 +45,51 @@ startBot = do
     print $ "Restarting at " <> formatTime defaultTimeLocale "%T%P UTC" time
     startBot
 
+(</>) :: Text -> Text -> Text
+l1 </> l2 = l1 <> "\n" <> l2
+
 handleReady :: Init -> Effect DiscordM ()
 handleReady (Init v u _ _ _) = liftIO . putText $
     "Connected to gateway v" <> show v <> " as user " <> show u
 
 handleMessage :: Message -> Effect DiscordM ()
 handleMessage msg@Message{..} = do
-    command msg "!vapor" $ \body -> do
-        reply msg (T.map vapor body)
+    command msg "!help" $ \body -> reply msg $ getHelp body
     command msg "!roll"  $ \body -> do
         gen <- liftIO newStdGen
         case parse parseDice "" body of
             Left err -> print err
-            Right roll@(_, _, mod') ->
-                let res = prettyList (rolls gen roll) mod'
+            Right roll@Rolls{..} ->
+                let res = prettyList (doRolls gen roll) modifier
                 in  reply msg $ mention messageAuthor <> " " <> res
     command msg "!coin" $ \_ -> do
         coin <- liftIO randomIO
         case coin of
             True  -> reply msg $ mention messageAuthor <> " HEADS"
             False -> reply msg $ mention messageAuthor <> " TAILS"
-    command msg "!b" $ \body -> reply msg $ regionalIndicator body
     when (validate messageAuthor) $ do
         command msg "!eval" $ interpret' eval' msg
         command msg "!type" $ interpret' typeOf' msg
+    command msg "!b" $ \body -> reply msg $ regionalIndicator body
+    command msg "!vapor" $ \body -> do
+        reply msg (T.map vapor body)
+
+getHelp :: Text -> Text
+getHelp "b" = "```!b STRING => print STRING with meme letters```"
+getHelp "vapor" = "```!vapor STRING => print STRING with anime meme letters```"
+getHelp "roll" = code $
+    "!roll dN       => roll 1 N-sided die" </>
+    "!roll MdN      => roll M N-sided dice" </>
+    "!roll MdN+MOD  => roll M N-sided dice, adding MOD once" </>
+    "!roll MdN++MOD => roll M N-sided dice, adding MOD to each"
+getHelp "eval" =
+    code "!eval BLOCK => evaluate a markdown haskell code block"
+getHelp "type" =
+    code "!type BLOCK => get the type of a markdown haskell code block"
+getHelp "coin" = code "!coin => flip a coin"
+getHelp _ = code $ "SAY `!help [command]` TO GET HELP. " </>
+                   "COMMANDS: roll, coin, b, vapor, eval, type"
+
 
 interpret' :: (Text -> Interpreter [Char]) -> Message -> Text -> Effect DiscordM ()
 interpret' action msg body = do
@@ -65,13 +97,13 @@ interpret' action msg body = do
     case parseRes of
         Right body' -> do
             res <- liftIO $ runInterpreter (action (toS body'))
-            reply msg . format . toS $ case res of
+            reply msg . code . toS $ case res of
                 Left err -> showErr err
                 Right r -> r
         Left _ -> do
-            reply msg $ "PLEASE FORMAT YOUR MESSAGE LIKE THIS:\n" <>
-                        "\\`\\`\\`hs\n" <>
-                        "[CODE]\n" <>
+            reply msg $ "PLEASE FORMAT YOUR MESSAGE LIKE THIS:" </>
+                        "\\`\\`\\`hs" </>
+                        "[CODE]" </>
                         "\\`\\`\\`"
 
 eval' :: Text -> Interpreter [Char]
@@ -124,10 +156,10 @@ showErr (GhcException e) = show e
 
 -- | Magic numbers because discord messages are limited to a length of 2000
 -- characters.
-format :: Text -> Text
-format output
-    | T.length output < 1993 = "```\n" <> output <> "```"
-    | otherwise = "```\n" <> T.take 1990 output <> "..." <> "```"
+code :: Text -> Text
+code str
+    | T.length str < 1993 = "```" </> str </> "```"
+    | otherwise = "```" </> T.take 1990 str <> "..." </> "```"
 
 -- | Epic meme
 regionalIndicator :: Text -> Text
@@ -150,48 +182,50 @@ parseCommand cmd = do
     body <- many (satisfy (const True))
     return (toS body)
 
-rolls :: StdGen -> (Int, Int, Int) -> [Int]
-rolls gen (n, size, _) = take n $ randomRs (1, size) gen
-
-prettyList :: [Int] -> Int -> Text
+prettyList :: [Int] -> Maybe Mod -> Text
 prettyList [] _ = "ROLLED NO DICE"
-prettyList [n] 0 = "ROLLED " <> show n
-prettyList ns  0 = T.concat ["ROLLED ", show $ sum ns,
-    " (", T.intercalate " + " $ fmap show ns, ")"]
-prettyList [n] mod' = T.concat ["ROLLED ", show $ n + mod',
-    " (", show n, " + ", show mod', ")"]
-prettyList ns  mod' = prettyList (mod':ns) 0
+prettyList [n] Nothing         = "ROLLED " <>
+    show n
+prettyList [n] (Just (Mod m _))  = "ROLLED " <>
+    show n <> " + " <> show m
+prettyList ns  Nothing         = "ROLLED " <>
+    T.intercalate ", " (map show ns) <> " = " <> show (sum ns)
+prettyList ns (Just (Mod m Total)) = "ROLLED " <>
+    T.intercalate ", " (map show ns) <> " + " <> show m <> " = " <> show (sum ns + m)
+prettyList ns (Just (Mod m Each)) = "ROLLED " <>
+    T.intercalate ", " (map ((<> " + " <> show m) . show) ns) <>
+    " = " <> (show . sum . map (+m) $ ns)
 
-{-
-!roll 0dn = ROLLED NO DICE
-!roll 1dn = ROLLED N
-!roll ndm = ROLLED N (A + ... + Z)
-!roll 0dn + c = ROLLED NO DICE
-!roll 1dn + c = ROLLED N (A + B)
-!roll ndm + c = ROLLED N (A + ... + Z + C)
--}
+doRolls :: StdGen -> Rolls -> [Int]
+doRolls gen Rolls{..} = take count $ randomRs (1, size) gen
 
 -- | Dice count is limited to one digit, but size can be arbitrary.
-parseDice :: Parser (Int, Int, Int)
+parseDice :: Parser Rolls
 parseDice = do
-    diceCount <- optionMaybe (digitToInt <$> digit)
+    count' <- optionMaybe (digitToInt <$> digit)
     void $ char 'd'
-    size <- read <$> many1 digit
+    size' <- read <$> many1 digit
     spaces
-    modifier' <- optionMaybe modifier
-    return (fromMaybe 1 diceCount, size, fromMaybe 0 modifier')
+    modifier' <- optionMaybe parseMod
+    return $ Rolls (fromMaybe 1 count') size' modifier'
 
 read = maybe 0 fst . head . reads
 
-modifier :: Parser Int
-modifier = do
-    op <- oneOf "+-"
+parseMod :: Parser Mod
+parseMod = do
+    op <- try (string "++") <|> try (string "--") <|> try (string "+") <|> string "-"
     spaces
     n <- read <$> many1 digit
-    if op == '+' then
-        return n
+    if op == "+" then
+        return $ Mod n Total
+    else if op == "++" then
+        return $ Mod n Each
+    else if op == "-" then
+        return $ Mod (-n) Total
+    else if op == "--" then
+        return $ Mod (-n) Each
     else
-        return (-n)
+        undefined
 
 -- | Convert printable ascii characters (except space) into corresponding
 -- fullwidth characters, by adding an offset of 65248 to their unicode
