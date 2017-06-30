@@ -1,7 +1,10 @@
 module Main where
 
 import Protolude
-import Lib
+import Lib (startBot)
+import Network.WebSockets (ConnectionException)
 
 main :: IO ()
-main = startBot 
+main = catch startBot (\e -> do
+    print (e :: ConnectionException)
+    main)

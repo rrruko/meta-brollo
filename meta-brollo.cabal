@@ -29,6 +29,7 @@ library
                      , hint
                      , comonad
                      , time
+                     , websockets
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings, NoImplicitPrelude
 
@@ -39,6 +40,7 @@ executable meta-brollo-exe
   build-depends:       base
                      , meta-brollo
                      , protolude >= 0.1.6 && < 0.2
+                     , websockets
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings, NoImplicitPrelude
 

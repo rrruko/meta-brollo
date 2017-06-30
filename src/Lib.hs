@@ -6,18 +6,18 @@ Description : Lib's main module
 -}
 
 {-# LANGUAGE OverloadedStrings, RecordWildCards #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Lib
     ( startBot
     ) where
 
-import Lib.Prelude hiding (many, optional, try)
+import Lib.Prelude hiding (list, many, optional, try)
 import Language.Haskell.Interpreter
 import Data.Char
 import Data.List (unlines)
 import qualified Data.Text as T
 import Pipes
-import Text.Parsec hiding ((<|>))
-import Text.Parsec.Prim (unexpected)
+import Text.Parsec hiding ((<|>), count)
 import Text.Parsec.Text (Parser)
 import Network.Discord
 import System.Random
@@ -43,7 +43,6 @@ startBot = do
         with MessageCreateEvent $ handleMessage
     time <- getCurrentTime
     print $ "Restarting at " <> formatTime defaultTimeLocale "%T%P UTC" time
-    startBot
 
 (</>) :: Text -> Text -> Text
 l1 </> l2 = l1 <> "\n" <> l2
@@ -61,7 +60,7 @@ handleMessage msg@Message{..} = do
             Left err -> print err
             Right roll@Rolls{..} ->
                 let res = prettyList (doRolls gen roll) modifier
-                in  reply msg $ mention messageAuthor <> " " <> res
+                in  reply msg $ mention messageAuthor <> " ROLLED " <> res
     command msg "!coin" $ \_ -> do
         coin <- liftIO randomIO
         case coin of
@@ -71,8 +70,7 @@ handleMessage msg@Message{..} = do
         command msg "!eval" $ interpret' eval' msg
         command msg "!type" $ interpret' typeOf' msg
     command msg "!b" $ \body -> reply msg $ regionalIndicator body
-    command msg "!vapor" $ \body -> do
-        reply msg (T.map vapor body)
+    command msg "!vapor" $ \body -> reply msg (T.map vapor body)
 
 getHelp :: Text -> Text
 getHelp "b" = "```!b STRING => print STRING with meme letters```"
@@ -108,17 +106,18 @@ interpret' action msg body = do
 
 eval' :: Text -> Interpreter [Char]
 eval' body = do
- setImportsQ imports
- eval . toS $ body
+    setImportsQ imports
+    eval . toS $ body
 
 typeOf' :: Text -> Interpreter [Char]
 typeOf' body = do
- setImportsQ imports
- typeOf . toS $ body
+    setImportsQ imports
+    typeOf . toS $ body
 
 reply :: Message -> Text -> Effect DiscordM ()
 reply Message{messageChannel=chan} cont =
-    fetch' $ CreateMessage chan cont Nothing
+    let inRange = T.length cont > 0 && T.length cont <= 2000
+    in  when inRange . fetch' $ CreateMessage chan cont Nothing
 
 validate :: User -> Bool
 validate author = show (userId author) == T.pack "162951695469510656"
@@ -173,28 +172,42 @@ mention u = "<@" <> show (userId u) <> ">"
 command :: Message -> Text -> (Text -> Effect DiscordM ()) -> Effect DiscordM ()
 command Message{..} cmd action =
     let res = parse (parseCommand $ toS cmd) "" messageContent
-    in  either (void . return) action res
+    in  either (void . pure) action res
 
 parseCommand :: [Char] -> Parser Text
 parseCommand cmd = do
     void $ string cmd
     spaces
     body <- many (satisfy (const True))
-    return (toS body)
+    pure (toS body)
 
+-- | Shows a list of dice roll results and a modifier as text.
 prettyList :: [Int] -> Maybe Mod -> Text
-prettyList [] _ = "ROLLED NO DICE"
-prettyList [n] Nothing         = "ROLLED " <>
-    show n
-prettyList [n] (Just (Mod m _))  = "ROLLED " <>
-    show n <> " + " <> show m
-prettyList ns  Nothing         = "ROLLED " <>
-    T.intercalate ", " (map show ns) <> " = " <> show (sum ns)
-prettyList ns (Just (Mod m Total)) = "ROLLED " <>
-    T.intercalate ", " (map show ns) <> " + " <> show m <> " = " <> show (sum ns + m)
-prettyList ns (Just (Mod m Each)) = "ROLLED " <>
-    T.intercalate ", " (map ((<> " + " <> show m) . show) ns) <>
-    " = " <> (show . sum . map (+m) $ ns)
+prettyList [] _ = "NO DICE"
+
+prettyList [n] Nothing          = show n
+prettyList [n] (Just (Mod m _)) = show n <> " " <> withSign m
+
+prettyList ns Nothing =
+    list ns <> " = " <> show (sum ns)
+prettyList ns (Just (Mod m Total)) =
+    list ns <> " (" <> withSign m <> ") = " <> show (sum ns + m)
+prettyList ns (Just (Mod m Each)) =
+    listWithMod m ns <> " = " <> (show . sum $ map (+m) ns)
+
+list :: [Int] -> Text
+list = T.intercalate ", " . map show
+
+listWithMod :: Int -> [Int] -> Text
+listWithMod m = T.intercalate ", " . map (withMod m)
+
+withMod :: Int -> Int -> Text
+withMod m n = show n <> " (" <> withSign m <> ")"
+
+withSign :: Int -> Text
+withSign n
+    | n >= 0 = "+" <> show n
+    | otherwise = show n
 
 doRolls :: StdGen -> Rolls -> [Int]
 doRolls gen Rolls{..} = take count $ randomRs (1, size) gen
@@ -207,9 +220,7 @@ parseDice = do
     size' <- read <$> many1 digit
     spaces
     modifier' <- optionMaybe parseMod
-    return $ Rolls (fromMaybe 1 count') size' modifier'
-
-read = maybe 0 fst . head . reads
+    pure $ Rolls (fromMaybe 1 count') size' modifier'
 
 parseMod :: Parser Mod
 parseMod = do
@@ -217,15 +228,18 @@ parseMod = do
     spaces
     n <- read <$> many1 digit
     if op == "+" then
-        return $ Mod n Total
+        pure $ Mod n Total
     else if op == "++" then
-        return $ Mod n Each
+        pure $ Mod n Each
     else if op == "-" then
-        return $ Mod (-n) Total
+        pure $ Mod (-n) Total
     else if op == "--" then
-        return $ Mod (-n) Each
+        pure $ Mod (-n) Each
     else
         undefined
+
+read :: [Char] -> Int
+read = maybe 0 fst . head . reads
 
 -- | Convert printable ascii characters (except space) into corresponding
 -- fullwidth characters, by adding an offset of 65248 to their unicode
