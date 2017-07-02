@@ -1,24 +1,18 @@
 {-# LANGUAGE TypeOperators, FlexibleInstances, DataKinds, TypeFamilies #-}
-{-# LANGUAGE OverloadedStrings, RecordWildCards #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings, RecordWildCards, MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Bot
     ( startBot
     ) where
 
-import Lib.Prelude hiding ()
-import Lib (parseCommand)
-import Language.Haskell.Interpreter
-import Data.Char
-import Data.List (unlines)
-import Data.Proxy
+import Lib
+import Lib.Prelude
+
 import qualified Data.Text as T
 import Network.Discord
-import GHC.TypeLits
 import System.Random
-import Data.Time.Clock
-import Data.Time.Format
-import Text.Parsec hiding (Reply, (<|>), count)
-import Text.Parsec.Text (Parser)
+import Text.Parsec (parse)
 
 instance DiscordAuth IO where
     auth = Bot . toS . T.strip <$> readFile "./token"
@@ -31,24 +25,43 @@ instance EventMap Command (DiscordApp IO) where
     type Domain   Command = Message
     type Codomain Command = Message
 
-    mapEvent p (m@Message{..})
-        | userIsBot messageAuthor = liftIO (putText "Ignoring bot message") *> mzero
-        | messageContent == "!roll" = liftIO (putText "Command match") *> pure m
-        | otherwise   = liftIO (putText $ "No command match")   *> mzero
-    mapEvent p ev = do
-        liftIO $ print ev
-        mzero
-
+    mapEvent _ (m@Message{..})
+        | messageAuthor == Webhook || userIsBot messageAuthor =
+              liftIO (putText "Ignoring bot message") *> mzero
+        | otherwise = pure m
+        
 data Reply
 
 instance EventMap Reply (DiscordApp IO) where
     type Domain   Reply = Message
     type Codomain Reply = ()
 
-    mapEvent p msg = do
+    mapEvent _ (msg@Message{..}) = do
         command msg "!roll" $ \body -> do
-            r <- liftIO $ randomRIO (0 :: Float,1)
-            reply msg (show r)
+            gen <- liftIO newStdGen
+            case parse parseDice "" body of
+                Left err -> print err
+                Right roll@Rolls{..} ->
+                    let res = prettyList (doRolls gen roll) modifier
+                    in  reply msg $ mention messageAuthor <> " " <> res
+        command msg "!coin" $ \_ -> do
+            r <- liftIO $ randomIO
+            reply msg $ case r of
+                True -> mention messageAuthor <> " HEADS"
+                False -> mention messageAuthor <> " TAILS"
+        command msg "!help" $ \body -> do
+            reply msg $ getHelp body
+        command msg "!b" $ \body -> do
+            reply msg $ regionalIndicator body
+        command msg "!vapor" $ \body -> do
+            reply msg $ T.map vapor body
+        when (validate messageAuthor) $ do
+            command msg "!eval" $ \body -> do
+                ans <- liftIO $ interpret' eval' body
+                reply msg ans
+            command msg "!type" $ \body -> do
+                ans <- liftIO $ interpret' typeOf' body
+                reply msg ans
         pure ()
 
 reply :: Message -> Text -> DiscordApp IO ()

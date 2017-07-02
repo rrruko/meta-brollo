@@ -8,7 +8,20 @@ Description : Lib's main module
 {-# LANGUAGE OverloadedStrings, RecordWildCards #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Lib
-    ( parseCommand
+    ( Rolls(..)
+    , code
+    , doRolls
+    , eval'
+    , getHelp
+    , interpret'
+    , parseCommand
+    , parseDice
+    , prettyList
+    , mention
+    , regionalIndicator
+    , typeOf'
+    , vapor
+    , validate
     ) where
 
 import Lib.Prelude hiding (list, many, optional, try)
@@ -16,13 +29,10 @@ import Language.Haskell.Interpreter
 import Data.Char
 import Data.List (unlines)
 import qualified Data.Text as T
-import Pipes
 import Text.Parsec hiding ((<|>), count)
 import Text.Parsec.Text (Parser)
 import Network.Discord
 import System.Random
-import Data.Time.Clock
-import Data.Time.Format
 
 data ModType = Total | Each
 data Mod = Mod Int ModType
@@ -53,11 +63,11 @@ getHelp "coin" = code "!coin => flip a coin"
 getHelp _ = code $ "SAY `!help [command]` TO GET HELP. " </>
                    "COMMANDS: roll, coin, b, vapor, eval, type"
 
-interpret' :: (Text -> Interpreter [Char]) -> Message -> Text -> Interpreter Text
-interpret' action msg body = case parseRes of
+interpret' :: (Text -> Interpreter [Char]) -> Text -> IO Text
+interpret' action body = case parseRes of
     Right body' -> do
-        res <- liftIO . runInterpreter . action $ toS body'
-        pure . code . toS $ case res of
+        res <- runInterpreter . action $ toS body'
+        pure $ code . toS $ case res of
             Left err -> showErr err
             Right r -> r
     Left _ -> pure $
