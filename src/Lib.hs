@@ -8,7 +8,7 @@ Description : Lib's main module
 {-# LANGUAGE OverloadedStrings, RecordWildCards #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Lib
-    ( startBot
+    ( parseCommand
     ) where
 
 import Lib.Prelude hiding (list, many, optional, try)
@@ -34,43 +34,8 @@ data Rolls = Rolls {
     modifier :: Maybe Mod
 }
 
-startBot :: IO ()
-startBot = do
-    tok <- T.strip <$> readFile "./token"
-    print tok
-    runBot (Bot $ toS tok) $ do
-        with ReadyEvent $ handleReady
-        with MessageCreateEvent $ handleMessage
-    time <- getCurrentTime
-    print $ "Restarting at " <> formatTime defaultTimeLocale "%T%P UTC" time
-
 (</>) :: Text -> Text -> Text
 l1 </> l2 = l1 <> "\n" <> l2
-
-handleReady :: Init -> Effect DiscordM ()
-handleReady (Init v u _ _ _) = liftIO . putText $
-    "Connected to gateway v" <> show v <> " as user " <> show u
-
-handleMessage :: Message -> Effect DiscordM ()
-handleMessage msg@Message{..} = do
-    command msg "!help" $ \body -> reply msg $ getHelp body
-    command msg "!roll"  $ \body -> do
-        gen <- liftIO newStdGen
-        case parse parseDice "" body of
-            Left err -> print err
-            Right roll@Rolls{..} ->
-                let res = prettyList (doRolls gen roll) modifier
-                in  reply msg $ mention messageAuthor <> " ROLLED " <> res
-    command msg "!coin" $ \_ -> do
-        coin <- liftIO randomIO
-        case coin of
-            True  -> reply msg $ mention messageAuthor <> " HEADS"
-            False -> reply msg $ mention messageAuthor <> " TAILS"
-    when (validate messageAuthor) $ do
-        command msg "!eval" $ interpret' eval' msg
-        command msg "!type" $ interpret' typeOf' msg
-    command msg "!b" $ \body -> reply msg $ regionalIndicator body
-    command msg "!vapor" $ \body -> reply msg (T.map vapor body)
 
 getHelp :: Text -> Text
 getHelp "b" = "```!b STRING => print STRING with meme letters```"
@@ -88,21 +53,19 @@ getHelp "coin" = code "!coin => flip a coin"
 getHelp _ = code $ "SAY `!help [command]` TO GET HELP. " </>
                    "COMMANDS: roll, coin, b, vapor, eval, type"
 
-
-interpret' :: (Text -> Interpreter [Char]) -> Message -> Text -> Effect DiscordM ()
-interpret' action msg body = do
-    let parseRes = parse parseEval "" (toS body)
-    case parseRes of
-        Right body' -> do
-            res <- liftIO $ runInterpreter (action (toS body'))
-            reply msg . code . toS $ case res of
-                Left err -> showErr err
-                Right r -> r
-        Left _ -> do
-            reply msg $ "PLEASE FORMAT YOUR MESSAGE LIKE THIS:" </>
-                        "\\`\\`\\`hs" </>
-                        "[CODE]" </>
-                        "\\`\\`\\`"
+interpret' :: (Text -> Interpreter [Char]) -> Message -> Text -> Interpreter Text
+interpret' action msg body = case parseRes of
+    Right body' -> do
+        res <- liftIO . runInterpreter . action $ toS body'
+        pure . code . toS $ case res of
+            Left err -> showErr err
+            Right r -> r
+    Left _ -> pure $
+        "PLEASE FORMAT YOUR MESSAGE LIKE THIS:" </>
+        "\\`\\`\\`hs" </>
+        "[CODE]" </>
+        "\\`\\`\\`"
+    where parseRes = parse parseEval "" $ toS body
 
 eval' :: Text -> Interpreter [Char]
 eval' body = do
@@ -113,11 +76,6 @@ typeOf' :: Text -> Interpreter [Char]
 typeOf' body = do
     setImportsQ imports
     typeOf . toS $ body
-
-reply :: Message -> Text -> Effect DiscordM ()
-reply Message{messageChannel=chan} cont =
-    let inRange = T.length cont > 0 && T.length cont <= 2000
-    in  when inRange . fetch' $ CreateMessage chan cont Nothing
 
 validate :: User -> Bool
 validate author = show (userId author) == T.pack "162951695469510656"
@@ -168,11 +126,6 @@ regionalIndicator = T.concatMap regionize . T.filter isAlpha
 
 mention :: User -> Text
 mention u = "<@" <> show (userId u) <> ">"
-
-command :: Message -> Text -> (Text -> Effect DiscordM ()) -> Effect DiscordM ()
-command Message{..} cmd action =
-    let res = parse (parseCommand $ toS cmd) "" messageContent
-    in  either (void . pure) action res
 
 parseCommand :: [Char] -> Parser Text
 parseCommand cmd = do

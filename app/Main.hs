@@ -1,7 +1,7 @@
 module Main where
 
 import Protolude
-import Lib (startBot)
+import Bot (startBot)
 import Network.WebSockets (ConnectionException(..))
 
 main :: IO ()
