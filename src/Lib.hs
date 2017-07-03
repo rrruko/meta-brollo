@@ -42,8 +42,8 @@ data Rolls = Rolls {
 l1 </> l2 = l1 <> "\n" <> l2
 
 getHelp :: Text -> Text
-getHelp "b" = "```!b STRING => print STRING with meme letters```"
-getHelp "vapor" = "```!vapor STRING => print STRING with anime meme letters```"
+getHelp "b" = code "!b STRING => print STRING with meme letters"
+getHelp "vapor" = code "!vapor STRING => print STRING with anime meme letters"
 getHelp "roll" = code $
     "!roll dN       => roll 1 N-sided die" </>
     "!roll MdN      => roll M N-sided dice" </>
@@ -82,8 +82,11 @@ typeOf' body = do
     typeOf . toS $ body
 
 validate :: User -> Bool
-validate author = show (userId author) == T.pack "162951695469510656"
-               || show (userId author) == T.pack "231224005149851649"
+validate author = show (userId author) `elem` bigBoys
+    where bigBoys :: [Text]
+          bigBoys = ["162951695469510656", "231224005149851649"] 
+
+
 
 parseEval :: Parser [Char]
 parseEval = do
