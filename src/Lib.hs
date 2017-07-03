@@ -1,12 +1,6 @@
-{-|
-Module      : Lib
-Description : Lib's main module
-
-
--}
-
 {-# LANGUAGE OverloadedStrings, RecordWildCards #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+
 module Lib
     ( Rolls(..)
     , code
