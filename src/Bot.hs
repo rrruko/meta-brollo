@@ -8,6 +8,7 @@ module Bot
 
 import Lib
 import Lib.Prelude
+import Interpret (eval', interpret', typeOf', validate)
 
 import qualified Data.Text as T
 import Network.Discord
