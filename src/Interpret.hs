@@ -54,7 +54,7 @@ interpret typeOnly parsedExpr = do
     pure . code $ 
         case res of
             Right (expr, exprType, result) -> 
-                toS $ if typeOnly then exprType else expr
+                toS $ if typeOnly then exprType else result
             Left err -> show err
 
 getExpr :: Text -> Either ParseError Text
