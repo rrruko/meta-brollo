@@ -8,7 +8,7 @@ module Bot
 
 import Lib
 import Lib.Prelude
-import Interpret (eval', interpret', typeOf', validate)
+import Interpret (tryInterpret, validate)
 
 import qualified Data.Text as T
 import Network.Discord
@@ -53,10 +53,10 @@ instance EventMap Reply (DiscordApp IO) where
         command msg "!vapor" $ \body -> reply msg $ T.map vapor body
         when (validate messageAuthor) $ do
             command msg "!eval" $ \body -> do
-                ans <- liftIO $ interpret' eval' body
+                ans <- liftIO $ tryInterpret False body 
                 reply msg ans
             command msg "!type" $ \body -> do
-                ans <- liftIO $ interpret' typeOf' body
+                ans <- liftIO $ tryInterpret True body
                 reply msg ans
 
 reply :: Message -> Text -> DiscordApp IO ()
@@ -67,7 +67,7 @@ reply Message{messageChannel=chan} cont =
 command :: Message -> Text -> (Text -> DiscordApp IO ()) -> DiscordApp IO ()
 command Message{..} cmd action =
     let res = parse (parseCommand $ toS cmd) "" messageContent
-    in  either (void . pure) action res
+    in  either (liftIO . void . forkIO . void . pure) action res
 
 data LogEvent a
 

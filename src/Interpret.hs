@@ -1,43 +1,64 @@
 module Interpret
-    ( eval'
-    , interpret'
-    , typeOf'
+    ( tryInterpret
     , validate
     ) where
 
 import Lib
 import Lib.Prelude hiding (list, many, optional, try)
 
-import Language.Haskell.Interpreter
+import Mueval.ArgsParse
+import Mueval.Context
+import Mueval.Interpreter
+import Language.Haskell.Interpreter hiding (interpret)
 import Text.Parsec.Text (Parser)
 import Network.Discord
 
-import Data.List (unlines)
 import Text.Parsec hiding ((<|>), count)
 
-interpret' :: (Text -> Interpreter String)-> Text -> IO Text
-interpret' action body = case parseRes of
-    Right body' -> do
-        res <- runInterpreter . action $ toS body'
-        pure $ code . toS $ case res of
-            Left err -> showErr err
-            Right r -> r
-    Left _ -> pure $
-        "PLEASE FORMAT YOUR MESSAGE LIKE THIS:" </>
-        "\\`\\`\\`hs" </>
-        "[CODE]" </>
-        "\\`\\`\\`"
-    where parseRes = parse parseEval "" $ toS body
+options :: Options
+options = Options 
+  { expression = ""
+  , modules = Just defaultModules
+  , timeLimit = 5
+  , user = ""
+  , loadFile = ""
+  , printType = False
+  , typeOnly = False
+  , extensions = False
+  , namedExtensions = []
+  , noImports = False
+  , rLimits = False
+  , packageTrust = False
+  , trustedPackages = defaultPackages
+  , help = False
+  }
 
-eval' :: Text -> Interpreter String 
-eval' body = do
-    setImportsQ imports
-    eval . toS $ body
 
-typeOf' :: Text -> Interpreter String
-typeOf' body = do
-    setImportsQ imports
-    typeOf . toS $ body
+tryInterpret :: Bool -> Text -> IO Text
+tryInterpret typeOnly msgBody = do
+    let tryParse = getExpr msgBody
+    case tryParse of
+        Right parsedExpr -> 
+            interpret typeOnly parsedExpr
+        Left err -> do
+            print err
+            pure $ "PLEASE FORMAT YOUR MESSAGE LIKE THIS:" </>
+                   "\\`\\`\\`hs" </>
+                   "[CODE]" </>
+                   "\\`\\`\\`"
+
+interpret :: Bool -> Text -> IO Text
+interpret typeOnly parsedExpr = do
+    let opts = options { typeOnly = typeOnly, expression = toS parsedExpr }
+    res <- runInterpreter (interpreter opts)
+    pure . code $ 
+        case res of
+            Right (expr, exprType, result) -> 
+                toS $ if typeOnly then exprType else expr
+            Left err -> show err
+
+getExpr :: Text -> Either ParseError Text
+getExpr msgBody = fmap toS . parse parseEval "" $ toS msgBody 
 
 validate :: User -> Bool
 validate author = show (userId author) `elem` bigBoys
@@ -48,28 +69,3 @@ parseEval :: Parser String
 parseEval = do
     void $ string "```hs\n"
     manyTill anyChar (try (string "```"))
-
-imports :: [(String, Maybe String)]
-imports =
-    [ ("Prelude", Nothing)
-    , ("Control.Arrow", Nothing)
-    , ("Control.Applicative", Nothing)
-    , ("Control.Monad", Nothing)
-    , ("Data.Bifunctor", Nothing)
-    , ("Data.Char", Nothing)
-    , ("Data.Complex", Nothing)
-    , ("Data.Either", Nothing)
-    , ("Data.Foldable", Nothing)
-    , ("Data.Functor", Nothing)
-    , ("Data.Function", Nothing)
-    , ("Data.List", Nothing)
-    , ("Data.Ord", Nothing)
-    , ("Data.Ratio", Nothing)
-    , ("Numeric", Nothing)
-    ]
-
-showErr :: InterpreterError -> String
-showErr (WontCompile es) = unlines $ map errMsg es
-showErr (UnknownError e) = show e
-showErr (NotAllowed e) = show e
-showErr (GhcException e) = show e
