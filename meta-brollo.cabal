@@ -24,7 +24,7 @@ library
                      , text
                      , pipes
                      , random
-                     , parsec
+                     , megaparsec
                      , process
                      , hint
                      , comonad

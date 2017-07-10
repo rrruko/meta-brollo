@@ -19,8 +19,8 @@ import Lib.Prelude hiding (list, many, optional, try)
 
 import Data.Char
 import qualified Data.Text as T
-import Text.Parsec hiding ((<|>), count)
-import Text.Parsec.Text (Parser)
+import Text.Megaparsec hiding ((<|>), count)
+import Text.Megaparsec.Text (Parser)
 import Network.Discord
 import System.Random
 
@@ -68,12 +68,12 @@ regionalIndicator = T.concatMap regionize . T.filter isAlpha
 mention :: User -> Text
 mention u = "<@" <> show (userId u) <> ">"
 
-parseCommand :: String -> Parser Text
+parseCommand :: Text -> Parser Text
 parseCommand cmd = do
-    void $ string cmd
-    spaces
-    body <- many (satisfy (const True))
-    pure (toS body)
+    void . string $ toS cmd
+    space
+    body <- many . satisfy $ const True
+    pure $ toS body
 
 -- | Shows a list of dice roll results and a modifier as text.
 prettyList :: [Int] -> Maybe Mod -> Text
@@ -109,31 +109,32 @@ doRolls gen Rolls{..} = take count $ randomRs (1, size) gen
 -- | Dice count is limited to one digit, but size can be arbitrary.
 parseDice :: Parser Rolls
 parseDice = do
-    count' <- optionMaybe (digitToInt <$> digit)
+    howMany <- optional integer 
     void $ char 'd'
-    size' <- read <$> many1 digit
-    spaces
-    modifier' <- optionMaybe parseMod
-    pure $ Rolls (fromMaybe 1 count') size' modifier'
+    faces <- integer 
+    space
+    modify <- optional parseMod
+    pure $ Rolls (fromMaybe 1 howMany) faces modify
 
+-- | Parses ++, --, +, or -, followed by an integer. Notice the implicit fail.
 parseMod :: Parser Mod
 parseMod = do
-    op <- try (string "++") <|> try (string "--") <|> try (string "+") <|> string "-"
-    spaces
-    n <- read <$> many1 digit
-    if op == "+" then
-        pure $ Mod n Total
-    else if op == "++" then
-        pure $ Mod n Each
-    else if op == "-" then
-        pure $ Mod (-n) Total
-    else if op == "--" then
-        pure $ Mod (-n) Each
-    else
-        undefined
+    Just (sign, modType) <- fmap modOperator . many $ oneOf ("+-" :: String)
+    space
+    n <- integer
+    pure $ Mod (sign * n) modType
+        where modOperator :: String -> Maybe (Int, ModType)
+              modOperator "++" = Just ( 1, Each)
+              modOperator "--" = Just (-1, Each)
+              modOperator "+"  = Just ( 1, Total)
+              modOperator "-"  = Just (-1, Total)
+              modOperator _    = Nothing
 
 read :: String -> Int
 read = maybe 0 fst . head . reads
+
+integer :: Parser Int
+integer = read <$> some digitChar
 
 -- | Convert printable ascii characters (except space) into corresponding
 -- fullwidth characters, by adding an offset of 65248 to their unicode

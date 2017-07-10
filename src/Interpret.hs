@@ -10,10 +10,10 @@ import Mueval.ArgsParse
 import Mueval.Context
 import Mueval.Interpreter
 import Language.Haskell.Interpreter hiding (interpret)
-import Text.Parsec.Text (Parser)
+import Text.Megaparsec.Text (Parser)
 import Network.Discord
 
-import Text.Parsec hiding ((<|>), count)
+import Text.Megaparsec hiding ((<|>), count)
 
 options :: Options
 options = Options 
@@ -57,7 +57,7 @@ interpret typeOnly parsedExpr = do
                 toS $ if typeOnly then exprType else result
             Left err -> show err
 
-getExpr :: Text -> Either ParseError Text
+getExpr :: Text -> Either (ParseError Char Dec) Text
 getExpr msgBody = fmap toS . parse parseEval "" $ toS msgBody 
 
 validate :: User -> Bool
