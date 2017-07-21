@@ -144,3 +144,4 @@ vapor c
     | ord c == 32                = '\12288'
     | ord c > 32 && ord c <= 126 = chr (ord c + 65248)
     | otherwise                  = c
+

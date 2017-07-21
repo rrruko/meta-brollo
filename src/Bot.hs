@@ -27,10 +27,12 @@ instance EventMap Command (DiscordApp IO) where
     type Codomain Command = Message
 
     mapEvent _ (m@Message{..})
-        | messageAuthor == Webhook || userIsBot messageAuthor =
-              liftIO (putText "Ignoring bot message") *> mzero
+        | messageAuthor == Webhook = 
+            liftIO (putText "Ignoring webhook message") *> mzero
+        | userIsBot messageAuthor = 
+            liftIO (putText "Ignoring bot message") *> mzero
         | otherwise = pure m
-        
+
 data Reply
 
 instance EventMap Reply (DiscordApp IO) where
@@ -80,7 +82,7 @@ instance Show a => EventMap (LogEvent a) (DiscordApp IO) where
         liftIO . putText $ show e
 
 type PingPongApp =
-    (
+    (   
         (MessageCreateEvent :<>: MessageUpdateEvent) :>
         (Command :> Reply)
     ) :<>: LogEvent Event
