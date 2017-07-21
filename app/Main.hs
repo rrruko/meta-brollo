@@ -4,4 +4,6 @@ import Protolude
 import Bot (startBot)
 
 main :: IO ()
-main = forever startBot
+main = catch startBot $ \e -> do
+    print (e :: SomeException)
+    main
