@@ -156,7 +156,7 @@ prettyList ns Nothing =
 prettyList ns (Just (Mod m Total)) =
     list ns <> " (" <> withSign m <> ") = " <> show (sum ns + m)
 prettyList ns (Just (Mod m Each)) =
-    listWithMod m ns <> " = " <> (show . sum $ map (+m) ns)
+    listWithMod m ns <> " = " <> show (sum $ map (+m) ns)
 
 list :: [Int] -> Text
 list = T.intercalate ", " . map show
@@ -165,7 +165,7 @@ listWithMod :: Int -> [Int] -> Text
 listWithMod m = T.intercalate ", " . map (withMod m)
 
 withMod :: Int -> Int -> Text
-withMod m n = show n <> " (" <> withSign m <> ")"
+withMod m n = show n <> " *(" <> withSign m <> ")*"
 
 withSign :: Int -> Text
 withSign n

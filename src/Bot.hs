@@ -29,7 +29,7 @@ instance EventMap Command (DiscordApp IO) where
         | messageAuthor == Webhook || userIsBot messageAuthor =
               liftIO (putText "Ignoring bot message") *> mzero
         | otherwise = pure m
-        
+
 data Reply
 
 instance EventMap Reply (DiscordApp IO) where
