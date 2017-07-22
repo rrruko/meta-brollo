@@ -8,11 +8,12 @@ module Bot
 
 import Lib
 import Lib.Prelude
+import Interpret (tryInterpret, validate)
 
 import qualified Data.Text as T
 import Network.Discord
 import System.Random
-import Text.Parsec (parse)
+import Text.Megaparsec (parse)
 
 instance DiscordAuth IO where
     auth = Bot . toS . T.strip <$> readFile "./token"
@@ -36,7 +37,7 @@ instance EventMap Reply (DiscordApp IO) where
     type Domain   Reply = Message
     type Codomain Reply = ()
 
-    mapEvent _ (msg@Message{..}) = do
+    mapEvent _ (msg@Message{..}) = void $ do
         command msg "!roll" $ \body -> do
             gen <- liftIO newStdGen
             case parse parseDice "" body of
@@ -45,24 +46,18 @@ instance EventMap Reply (DiscordApp IO) where
                     let res = prettyList (doRolls gen roll) modifier
                     in  reply msg $ mention messageAuthor <> " " <> res
         command msg "!coin" $ \_ -> do
-            r <- liftIO $ randomIO
-            reply msg $ case r of
-                True -> mention messageAuthor <> " HEADS"
-                False -> mention messageAuthor <> " TAILS"
-        command msg "!help" $ \body -> do
-            reply msg $ getHelp body
-        command msg "!b" $ \body -> do
-            reply msg $ regionalIndicator body
-        command msg "!vapor" $ \body -> do
-            reply msg $ T.map vapor body
+            r <- liftIO randomIO
+            reply msg $ mention messageAuthor <> if r then " HEADS" else " TAILS"
+        command msg "!help"  $ \body -> reply msg $ getHelp body
+        command msg "!b"     $ \body -> reply msg $ regionalIndicator body
+        command msg "!vapor" $ \body -> reply msg $ T.map vapor body
         when (validate messageAuthor) $ do
             command msg "!eval" $ \body -> do
-                ans <- liftIO $ interpret' eval' body
+                ans <- liftIO $ tryInterpret False body 
                 reply msg ans
             command msg "!type" $ \body -> do
-                ans <- liftIO $ interpret' typeOf' body
+                ans <- liftIO $ tryInterpret True body
                 reply msg ans
-        pure ()
 
 reply :: Message -> Text -> DiscordApp IO ()
 reply Message{messageChannel=chan} cont =
@@ -71,8 +66,8 @@ reply Message{messageChannel=chan} cont =
 
 command :: Message -> Text -> (Text -> DiscordApp IO ()) -> DiscordApp IO ()
 command Message{..} cmd action =
-    let res = parse (parseCommand $ toS cmd) "" messageContent
-    in  either (void . pure) action res
+    let res = parse (parseCommand cmd) "" messageContent
+    in  either (liftIO . void . forkIO . void . pure) action res
 
 data LogEvent a
 

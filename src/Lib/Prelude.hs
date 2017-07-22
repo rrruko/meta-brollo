@@ -6,6 +6,8 @@ https://github.com/sdiehl/protolude/blob/master/Symbols.md
 -}
 module Lib.Prelude
     ( module Exports
+    , module String
     ) where
 
 import Protolude as Exports
+import Data.String as String -- Because dependencies use it
