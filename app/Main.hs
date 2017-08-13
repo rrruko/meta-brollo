@@ -5,5 +5,5 @@ import Bot (startBot)
 
 main :: IO ()
 main = catch startBot $ \e -> do
-    print (e :: SomeException)
-    main
+    putText "*** Exception:"
+    putText $ "  " <> show (e :: SomeException)
