@@ -1,5 +1,6 @@
-{-# LANGUAGE OverloadedStrings, RecordWildCards #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
 
 module Lib
     ( (</>)
@@ -15,22 +16,22 @@ module Lib
     , vapor
     ) where
 
-import Lib.Prelude hiding (list, many, optional, try)
+import           Lib.Prelude          hiding (list, many, optional)
 
-import Data.Char
-import qualified Data.Text as T
-import Text.Megaparsec hiding ((<|>), count)
-import Text.Megaparsec.Text (Parser)
-import Network.Discord
-import System.Random
+import           Data.Char
+import qualified Data.Text            as T
+import           Network.Discord
+import           System.Random
+import           Text.Megaparsec      hiding (count, (<|>))
+import           Text.Megaparsec.Text (Parser)
 
 data ModType = Total | Each
 data Mod = Mod Int ModType
 
 -- Describe what dice will be rolled
 data Rolls = Rolls {
-    count :: Int,
-    size :: Int,
+    count    :: Int,
+    size     :: Int,
     modifier :: Maybe Mod
 }
 
@@ -52,6 +53,7 @@ getHelp "type" =
 getHelp "coin" = code "!coin => flip a coin"
 getHelp _ = code $ "SAY `!help [command]` TO GET HELP. " </>
                    "COMMANDS: roll, coin, b, vapor, eval, type"
+
 -- | Magic numbers because discord messages are limited to a length of 2000
 -- characters.
 code :: Text -> Text
@@ -109,12 +111,12 @@ doRolls gen Rolls{..} = take count $ randomRs (1, size) gen
 -- | Dice count is limited to one digit, but size can be arbitrary.
 parseDice :: Parser Rolls
 parseDice = do
-    howMany <- optional integer 
+    howMany <- optional integer
     void $ char 'd'
-    faces <- integer 
+    faces <- integer
     space
-    modify <- optional parseMod
-    pure $ Rolls (fromMaybe 1 howMany) faces modify
+    mod' <- optional parseMod
+    pure $ Rolls (fromMaybe 1 howMany) faces mod'
 
 -- | Parses ++, --, +, or -, followed by an integer. Notice the implicit fail.
 parseMod :: Parser Mod
@@ -144,4 +146,3 @@ vapor c
     | ord c == 32                = '\12288'
     | ord c > 32 && ord c <= 126 = chr (ord c + 65248)
     | otherwise                  = c
-

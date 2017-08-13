@@ -1,19 +1,24 @@
-{-# LANGUAGE TypeOperators, FlexibleInstances, DataKinds, TypeFamilies #-}
-{-# LANGUAGE OverloadedStrings, RecordWildCards, MultiParamTypeClasses #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 module Bot
     ( startBot
     ) where
 
-import Lib
-import Lib.Prelude
-import Interpret (tryInterpret, validate)
+import           Interpret       (tryInterpret, validate)
+import           Lib
+import           Lib.Prelude
 
-import qualified Data.Text as T
-import Network.Discord
-import System.Random
-import Text.Megaparsec (parse)
+import qualified Data.Text       as T
+import           Network.Discord
+import           System.Random
+import           Text.Megaparsec (parse)
 
 instance DiscordAuth IO where
     auth = Bot . toS . T.strip <$> readFile "./token"
@@ -27,9 +32,9 @@ instance EventMap Command (DiscordApp IO) where
     type Codomain Command = Message
 
     mapEvent _ (m@Message{..})
-        | messageAuthor == Webhook = 
+        | messageAuthor == Webhook =
             liftIO (putText "Ignoring webhook message") *> mzero
-        | userIsBot messageAuthor = 
+        | userIsBot messageAuthor =
             liftIO (putText "Ignoring bot message") *> mzero
         | otherwise = pure m
 
@@ -49,13 +54,14 @@ instance EventMap Reply (DiscordApp IO) where
                     in  reply msg $ mention messageAuthor <> " " <> res
         command msg "!coin" $ \_ -> do
             r <- liftIO randomIO
-            reply msg $ mention messageAuthor <> if r then " HEADS" else " TAILS"
+            let author = messageAuthor
+            reply msg $ mention author <> if r then " HEADS" else " TAILS"
         command msg "!help"  $ \body -> reply msg $ getHelp body
         command msg "!b"     $ \body -> reply msg $ regionalIndicator body
         command msg "!vapor" $ \body -> reply msg $ T.map vapor body
         when (validate messageAuthor) $ do
             command msg "!eval" $ \body -> do
-                ans <- liftIO $ tryInterpret False body 
+                ans <- liftIO $ tryInterpret False body
                 reply msg ans
             command msg "!type" $ \body -> do
                 ans <- liftIO $ tryInterpret True body
@@ -82,7 +88,7 @@ instance Show a => EventMap (LogEvent a) (DiscordApp IO) where
         liftIO . putText $ show e
 
 type PingPongApp =
-    (   
+    (
         (MessageCreateEvent :<>: MessageUpdateEvent) :>
         (Command :> Reply)
     ) :<>: LogEvent Event
