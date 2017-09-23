@@ -63,7 +63,7 @@ code str
 
 -- | Epic meme
 regionalIndicator :: Text -> Text
-regionalIndicator = T.concatMap regionize . T.filter isAlpha
+regionalIndicator = T.concatMap regionize . T.filter (\c -> isAlpha c && isAscii c)
     where regionize ch =
               ":regional_indicator_" <> T.singleton (toLower ch) <> ": "
 
