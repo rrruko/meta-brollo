@@ -20,6 +20,7 @@ import           Lib.Prelude          hiding (list, many, optional)
 
 import           Data.Char
 import qualified Data.Text            as T
+import           Data.Text.ICU.Normalize (NormalizationMode(NFD), normalize)
 import           Network.Discord
 import           System.Random
 import           Text.Megaparsec      hiding (count, (<|>))
@@ -63,9 +64,11 @@ code str
 
 -- | Epic meme
 regionalIndicator :: Text -> Text
-regionalIndicator = T.concatMap regionize . T.filter (\c -> isAlpha c && isAscii c)
-    where regionize ch =
-              ":regional_indicator_" <> T.singleton (toLower ch) <> ": "
+regionalIndicator = T.concatMap regionize
+    . T.filter (\c -> isAlpha c && isAscii c)
+    . normalize NFD
+        where regionize ch =
+                  ":regional_indicator_" <> T.singleton (toLower ch) <> ": "
 
 mention :: User -> Text
 mention u = "<@" <> show (userId u) <> ">"
