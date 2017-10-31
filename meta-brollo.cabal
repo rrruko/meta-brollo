@@ -3,11 +3,11 @@ version:             0.1.0.0
 -- synopsis:
 -- description:
 homepage:            https://github.com/githubuser/meta-brollo#readme
-license:             BSD3
-license-file:        LICENSE
-author:              Author name here
-maintainer:          example@example.com
-copyright:           2017 Author name here
+license:             MIT
+license-file:        LICENSE.md
+author:              Ruko
+maintainer:          rukokarasu@gmail.com
+copyright:           2017 Ethan Jones
 category:            Web
 build-type:          Simple
 extra-source-files:  README.md
